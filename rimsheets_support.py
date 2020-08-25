@@ -36,6 +36,10 @@ def set_Tk_var():
     msg_output.set('')
     global progressBar
     progressBar = tk.IntVar()
+    global progressSubBar
+    progressSubBar = tk.IntVar()
+    global msg_progressStage
+    msg_progressStage = tk.StringVar() 
 
 def init(top, gui, *args, **kwargs):
     global w, top_level, root
@@ -46,6 +50,11 @@ def init(top, gui, *args, **kwargs):
 def setProgress(message, progress):
     msg_output.set(message)
     progressBar.set(progress)
+    top_level.update()
+
+def setSubProgress(message, progress):
+    msg_progressStage.set(message)
+    progressSubBar.set(progress)
     top_level.update()
 
 

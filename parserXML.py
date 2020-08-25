@@ -1,5 +1,8 @@
+#TODO choice between group by mod or by def type for workshop
+
 import os
 import time
+import re
 import signal
 import datetime as dt
 import functools
@@ -11,7 +14,9 @@ import pandas as pd
 
 import rimsheets_support
 
-EXCLUDED = {'Patches', 'Keyed',}
+#TODO: Checkbox selection for skip directories
+EXCLUDED = {}
+#EXCLUDED = {'Patches', 'Keyed', 'ThingDefs_Buildings'}
 DEFS = list()
 #TODO: Auto detect / manual set RW directory
 DIR_CORE_DEFS = ["/home/user/.local/share/Steam/steamapps/common/RimWorld/Data/Core/Defs", 'Core']
@@ -25,7 +30,7 @@ VERBOSE = False
 LOGGING = True
 ELAPSED_TIME = 0.0
 
-OUTPUT_TYPE = 'xlxs' #TODO: file type choice
+OUTPUT_TYPE = 'csv' #TODO: file type choice
 OUTPUT_LOCATION = './'
 OUTPUT_NAME = '' #unused TODO: save file location / name
 SINGLE_FILE = False
@@ -72,88 +77,57 @@ def debug(func):
 
 def parseXML(filename, modName, progress):
 	"""Get data contained in XML files"""
+	tic = time.perf_counter()
 	try:
-		root = ET.parse(filename)
+		tree = ET.parse(filename)
+		root = tree.getroot()
 		parsedXML = [['modNumber', modName]]
-		
-		for elem in root.iter():
-			rimsheets_support.setProgress(
-				'Scanning XML:\n{}\nWorking... Please be patient this may take a while'.format(elem),
-				progress)
+		topleveltag = ''
 
+		try:
+			for idx, elem in enumerate(root.iter()):
+				if idx == 2:
+					topleveltag = elem.tag
+					with open('./tags.txt', 'a') as f:
+						f.write('{} : {}\n\n'.format(filename, topleveltag))
+				if elem.tag == topleveltag:
+					parsedXML.append('!BREAK!')
+				if elem.attrib:
+					parsedXML.append([elem.tag, elem.attrib, elem.text.strip()])
+				else:
+					parsedXML.append([elem.tag, elem.text.strip()])
+		except AttributeError as ex:
+			pass
+    
+		#for elem in root.iter():
+		#	parsedXML.append([str(elem.tag).strip(), str(elem.text).strip()])
+			'''
 			if elem.tag == 'filter':
 				pass
-			elif elem.tag != 'li':
-				parsedXML.append([str(elem.tag).strip(), str(elem.text).strip()])
+			#elif elem.tag != 'li':
+			#	parsedXML.append([str(elem.tag).strip(), str(elem.text).strip()])
 			else:
-				parsedXML.append([str(elem.text).strip()])
-			parsedXML.append('!BREAK!')
+				parsedXML.append([str(elem.tag).strip(), str(elem.text).strip()])
+			#	parsedXML.append([str(elem.text).strip()])
+			'''
+		#parsedXML.append('!BREAK!')
 		
+		passedTime = time.perf_counter() - tic
+		rimsheets_support.setSubProgress(
+				'Scanning XML:\n{}\n{}'.format(elem, (100 - int(progress))), progress)
+		'''
+		rimsheets_support.setSubProgress(
+				'Scanning XML:\n{}\nWorking... Please be patient this may take a while\n{}'.format(
+					elem, (100 - progress * passedTime)), progress)
+		'''
+		#print(parsedXML)
+		if re.search('ThingDefs_Misc', filename):
+			with open('./out.txt', 'a') as f:
+				f.write('{}\n\n'.format(parsedXML))
+		#input()
 		return parsedXML
 	except:
 		return [''] #In case some modder left an empty XML file
-
-
-def toDF(filename, data):
-	"""Convert parsed XML data to pandas dataframes"""
-	if VERBOSE: print(filename)
-	listOfDf = list()
-	listOfDicts = [[], []]
-	df = dict()
-
-	#Break defs within XML files into individual items
-	i = 0
-	for each in data:
-		if each != '!BREAK!':
-			listOfDicts[i].append(each)
-		else:
-			i += 1
-			listOfDicts.append([''])
-
-	#Convert defs to pandas dataframes
-	for idx, def_ in enumerate(listOfDicts):
-		for each in def_:
-			try:
-				df[each[0]] = each[1]
-			except:
-				pass
-		listOfDf.append(pd.DataFrame(df, index=[idx]))
-
-	try:
-		return [filename, pd.concat(listOfDf).drop_duplicates('defName').set_index('defName')]
-	except KeyError:
-		try:
-			#Some files (e.g. SongDefs) do not contain a 'defName' tag but are still wanted so we dump them raw
-			return [filename, pd.concat(listOfDf)]
-		except:
-			pass
-		if VERBOSE: print('KEY ERROR ON: {}'.format(filename))
-		FAILED_FILES.append('KEY ERROR ON: {}'.format(filename))
-		pass
-
-
-def toExcel(dfList, filename):
-	"""Save XML data as an Excel xlxs workbook"""
-	Excelwriter = pd.ExcelWriter("{}{}.xlsx".format(OUTPUT_LOCATION, filename), engine="xlsxwriter")
-
-	try:
-		for i, df in dfList:
-			df.to_excel(Excelwriter, sheet_name=str(i))
-	except:
-		if VERBOSE: print('ERROR DURING WRITE OF: {}'.format(filename))
-		FAILED_FILES.append('ERROR DURING WRITE OF: {}'.format(filename))
-		pass
-	
-	Excelwriter.save()
-
-
-def toCSV(dfList, filename):
-	"""Save XML data as a raw CSV file"""
-	try:
-		dfList.to_csv('{}{}.csv'.format(OUTPUT_LOCATION, filename))
-	except:
-		if VERBOSE: print('ERROR DURING WRITE OF: {}'.format(filename))
-		pass
 	
 
 def getFileList(dirName, fileType='xml'): 
@@ -165,7 +139,6 @@ def getFileList(dirName, fileType='xml'):
 
 def scanXML(dirName, listOfFiles):
 	dictOfDefs = dict()
-
 	i = 1
 	for elem in listOfFiles:
 		if VERBOSE: print('Scanning XML... {} / {}'.format(i, len(listOfFiles)))
@@ -173,12 +146,20 @@ def scanXML(dirName, listOfFiles):
 
 		if dirName[1] == 'Workshop':
 			modName = elem.split('294100')[-1]
-			modName = modName.split('/')[0]
+			modName = modName.split('/')[1]
+			defType = modName
 		else:
+			if re.search('Steam/steamapps/common/RimWorld/Data/Core/Defs', elem):
+				category = elem.split('Steam/steamapps/common/RimWorld/Data/Core/Defs/')[-1]
+				category = '.'.join(category.split('/')[:-1])
+			elif re.search('Steam/steamapps/common/RimWorld/Data/Royalty/Defs', elem):
+				category = elem.split('Steam/steamapps/common/RimWorld/Data/Core/Defs/')[-1]
+				category = '.'.join(category.split('/')[:-1])
 			modName = dirName[1]
+			#defType = elem.split('/')[-1]
+			defType = category
 
 		if elem.split('.')[-1] == 'xml':
-			defType = elem.split('/')[-2]
 			if defType not in EXCLUDED:
 				if defType in dictOfDefs:
 					newR = dictOfDefs[defType] + parseXML(elem, modName, progress)
@@ -186,75 +167,228 @@ def scanXML(dirName, listOfFiles):
 				else:
 					dictOfDefs[defType] = parseXML(elem, modName, progress)
 			i += 1
-	
+	#input()
 	return dictOfDefs
+
+
+def listToChunks(filename, list_, chunkSize):
+	for i in range(0, len(list_), chunkSize):
+		yield [filename, list_[i : i + chunkSize]]
+
+
+
+
+def toDF(filename, data, isPostponed=False):
+	"""Convert parsed XML data of the same kind (eg HediffDefs) to single pandas dataframes"""
+	if VERBOSE: print(filename)
+	listOfDf = list()
+	df = dict()
+	
+	#Some files (e.g. SongDefs) do not contain a 'defName' tag but are still wanted so we dump them raw
+	if not isPostponed:
+		listOfDicts = [[], []]
+		#Break defs within XML files into individual items
+		i = 0
+		for each in data:
+			if each != '!BREAK!':
+				listOfDicts[i].append(each)
+			else:
+				i += 1
+				listOfDicts.append([''])
+
+		#Ran out of memory while operating on 44k df, trying to avoid that again
+		if len(listOfDicts) > 10000:
+				return ['postpone', filename, listOfDicts]
+	else:
+		listOfDicts = data
+
+	with open('./data/{}.txt'.format(filename), 'w') as f:
+		for val in listOfDicts:
+			f.write('{}\n\n'.format(val))
+	#Convert defs to pandas dataframes
+	i = 1
+	for idx, def_ in enumerate(listOfDicts):
+		tic = time.perf_counter()
+		for each in def_:
+			try:
+				df[each[0]] = each[1]	
+				progress = (int(idx) * 100) / int(len(listOfDicts))
+				rimsheets_support.setSubProgress('Creating {} data:\n{}\n{} / {}'.format(
+					filename, each[0], idx, len(listOfDicts)), progress)
+			except:
+				pass
+		#df['!BREAK'] = '!BREA
+		listOfDf.append(pd.DataFrame(df, index=[i]))
+		i += 1
+		passedTime = time.perf_counter() - tic
+		rimsheets_support.setProgress('Estimated time: {}'.format((100 - int(progress))), 33)
+	
+	#listOfDf.append(pd.DataFrame(df, index=[idx]))	
+	
+	try:
+		result = pd.concat(listOfDf, ignore_index=True).drop_duplicates('defName').set_index('defName')
+	except KeyError:
+		result = pd.concat(listOfDf, ignore_index=True)
+	return [filename, result]
+	#TODO try to concat individual sublists
+	#TODO Make sure filename isn't overwriting data due to sublist
+	
+
+
+def toExcel(dfList, filename):
+	"""Save XML data as an Excel xlxs workbook"""
+	print("{}{}.xlsx".format(OUTPUT_LOCATION, filename))
+	filename = 'test1'
+	#input()
+	Excelwriter = pd.ExcelWriter("{}{}.xlsx".format(OUTPUT_LOCATION, filename), engine="xlsxwriter")
+	#for i, df in dfList:
+#		print(i)
+#		df.to_excel(Excelwriter, sheet_name=str(i))
+	
+	try:
+		for i, df in dfList:
+			print(i)
+			if len(i) > 31:
+				i = i[:30]
+			df.to_excel(Excelwriter, sheet_name=str(i))
+	except:
+		if VERBOSE: print('ERROR DURING WRITE OF: {}'.format(filename))
+		FAILED_FILES.append('ERROR DURING WRITE OF: {}'.format(filename))
+		pass
+	
+	
+	Excelwriter.save()
+
+
+def toCSV(dfList, filename):
+	"""Save XML data as a raw CSV file"""
+	try:
+		dfList.to_csv('{}{}.csv'.format(OUTPUT_LOCATION, filename))
+	except:
+		if VERBOSE: print('ERROR DURING WRITE OF: {}'.format(filename))
+		pass
+
 
 
 def cleanup(dfList, modType):
 	if VERBOSE: print("sorting...")
 	dfList.sort(key=lambda x: x[0])
-			
+	
+	toExcel(dfList, modType[1])	
+	toCSV(dfList, modType[1])
 	if VERBOSE: print('exporting...')
-	{
-		'xlxs': lambda: toExcel(dfList, modType[1]),
-		'csv': lambda: toCSV(dfList, modType[1]),
-	}.get(OUTPUT_TYPE, lambda: None)()
+	
+	#if OUTPUT_TYPE == 'xlxs':
+	#	toExcel(dfList, modType[1])
+	#elif OUTPUT_TYPE == 'csv':
+	#	toCSV(dfList, modType[1])
 
-	if VERBOSE: print('DONE!')
+	print('DONE!')
+	'''
 	if VERBOSE: print('Max: {}'.format(max(times)))
 	if VERBOSE: print('Min: {}'.format(min(times)))
 	if VERBOSE: print('Total: {}'.format(sum(times)))
 	if VERBOSE: print('Average: {}'.format(sum(times) / len(times)))
+	'''
 
 
-def run():	
-	tic = time.perf_counter()
-	for modType in DEFS:
+
+def run(postponed=None):	
+	if postponed:
 		dfList = list()
-		dictOfDefs = dict()
-		if VERBOSE: print('Starting scan on {}'.format(modType[1]))	
-		listOfFiles = getFileList(modType)
-		dictOfDefs = scanXML(modType, listOfFiles)
+		superlist = list(listToChunks(postponed[0], postponed[1], 10000))
 
-		i = 1
-		for key, val in dictOfDefs.items():
-			if VERBOSE: print('Converting... {} / {}'.format(i, len(dictOfDefs)))
-			
+		for each in superlist:
 			signal.signal(signal.SIGALRM, alarm_handler)
 			signal.alarm(TIMEOUT_VAL)
 			try:
-				progress = (int(i) * 100) / int(len(dictOfDefs))
-				banner = 'Parsing: {}\n{} / {}\n Working... Please be patient this may take a while'.format(
-					key, i, len(dictOfDefs))
-    
-				rimsheets_support.setProgress(banner, progress)
-				df = toDF(key, val)
+				df = toDF(each[0], each[1])
 				if df:
 					if VERBOSE: print('ON: {}'.format(df[0]))
 					dfList.append(df)
 
 			except TimeOutException:
-				FAILED_FILES.append('TIME OUT ON: {}'.format(key))
+				FAILED_FILES.append('TIME OUT ON: {}'.format(postponed[0]))
 			signal.alarm(0)
-			i += 1
+				
+		cleanup(dfList, postponed[0])
 
-		if not SINGLE_FILE:
-			cleanup(dfList, modType[1])
+	else:	
+		tic = time.perf_counter()
+		rimsheets_support.setProgress('Collecting list of files.', 0)
 
-	if SINGLE_FILE:
-		cleanup(dfList, 'RimSheets')
+		#listOfFiles = list()
+		#TODO combine file lists rather than enumerate over them
+		for idx, modType in enumerate(DEFS):
+			#listOfFiles.append(modType)
+
+			dfList = list()
+			dictOfDefs = dict()
+			if modType[1] == 'Workshop':
+				postponed = list()
+
+			if VERBOSE: print('Starting scan on {}'.format(modType[1]))	
+			listOfFiles = getFileList(modType)
+			
+			rimsheets_support.setProgress('Extracting data package {} of {}.'.format(idx+1, len(DEFS)), 25)
+			dictOfDefs = scanXML(modType, listOfFiles)
+
+			rimsheets_support.setProgress('Converting data package {} of {}.'.format(idx+1, len(DEFS)), 50)
+			
+			i = 1
+			for key, val in dictOfDefs.items():
+				if VERBOSE: print('Converting... {} / {}'.format(i, len(dictOfDefs)))
+				
+				signal.signal(signal.SIGALRM, alarm_handler)
+				signal.alarm(TIMEOUT_VAL)
+				try:
+					progress = (int(i) * 100) / int(len(dictOfDefs))
+					banner = 'Parsing: {}\n{} / {}\n Working... Please be patient this may take a while.'.format(
+						key, i, len(dictOfDefs))
+		
+					rimsheets_support.setSubProgress(banner, progress)
+					df = toDF(key, val)
+					if df:
+						if df[0] == 'postpone':
+							postponed.append([df[1], df[2]])
+						else:
+							if VERBOSE: print('ON: {}'.format(df[0]))
+							dfList.append(df)
+
+				except TimeOutException:
+					FAILED_FILES.append('TIME OUT ON: {}'.format(key))
+				signal.alarm(0)
+				i += 1
+
+			print(len(dfList))
+			if not SINGLE_FILE:
+				rimsheets_support.setProgress('Cleaning up.', 75)
+				cleanup(dfList, modType[1])
+
+		if SINGLE_FILE:
+			rimsheets_support.setProgress('Cleaning up.', 75)
+			cleanup(dfList, 'RimSheets')
+
+	if postponed:
+		for idx, each in enumerate(postponed):
+			progress = (int(idx) * 100) / len(postponed)
+			message = 'Large data subset {} detected\nMaking second pass on set {} of {}.'.format(each[1], idx, len(postponed)) 
+			rimsheets_support.setProgress(message, progress)
+			FAILED_FILES.append('TOO LARGE, SENT TO POSTPONED: {}'.format(each[1]))
+			run(each)
 
 	toc = time.perf_counter()
 	ELAPSED_TIME = toc - tic
 
+	rimsheets_support.setProgress('', 100)
 	if len(FAILED_FILES) > 0:
 		with open(LOG, 'w') as f:
 			for each in FAILED_FILES:
 				f.write('{}\n'.format(each))
-		rimsheets_support.setProgress(
+		rimsheets_support.setSubProgress(
 			'Done in {} seconds.\nErrors were encountered, see log for details.'.format(round(ELAPSED_TIME, 4)), 100)
 	else:
-		rimsheets_support.setProgress('Done in {} seconds.'.format(round(ELAPSED_TIME, 4)), 100)
+		rimsheets_support.setSubProgress('Done in {} seconds.'.format(round(ELAPSED_TIME, 4)), 100)
 
 '''
 

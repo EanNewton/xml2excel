@@ -48,15 +48,35 @@ def destroy_Toplevel1():
     w.destroy()
     w = None
 
+
+class CustomCheckbutton(tk.Checkbutton):
+    def __init__(self, master, **kw):
+        tk.Checkbutton.__init__(self, master=master, **kw)
+        self.configure(background='#e6e6e6')
+        self.configure(foreground='black')
+        self.defaultBackground = self['background']
+        self.configure(highlightbackground='#e6e6e6')
+        self.configure(justify='left')
+        #self.bind('<Enter>', self.on_enter)
+        #self.bind('<Leave>', self.on_leave)
+
+    def on_enter(self, e):
+        self['background'] = self['activebackground']
+    def on_leave(self, e):
+        self['background'] = self.defaultBackground
+
+
 class Toplevel1:
     def __init__(self, top=None):
         '''This class configures and populates the toplevel window.
            top is the toplevel containing window.'''
-        _bgcolor = '#d9d9d9'  # X11 color: 'gray85'
+
+        _bgcolor = '#e6e6e6'  # X11 color: 'gray85'
         _fgcolor = '#000000'  # X11 color: 'black'
-        _compcolor = '#d9d9d9' # X11 color: 'gray85'
-        _ana1color = '#d9d9d9' # X11 color: 'gray85'
-        _ana2color = '#ececec' # Closest X11 color: 'gray92'
+        _compcolor = '#e6e6e6' # X11 color: 'gray85'
+        _ana1color = '#e6e6e6' # X11 color: 'gray85'
+        _ana2color = '#e6e6e6' # Closest X11 color: 'gray92'
+
         self.style = ttk.Style()
         if sys.platform == "win32":
             self.style.theme_use('winnative')
@@ -70,33 +90,35 @@ class Toplevel1:
         top.minsize(1, 1)
         top.maxsize(2545, 1570)
         top.resizable(1, 1)
+        top.configure(background='#e6e6e6')
         top.title("RimSheets Generator")
 
-        self.Button1 = tk.Button(top)
-        self.Button1.place(relx=0.455, rely=0.58, height=31, width=60)
-        self.Button1.configure(command=rimsheets_support.run)
-        self.Button1.configure(text='''Start''')
-
+        #General GUI Decorator Layout
         self.Label1 = tk.Label(top)
         self.Label1.place(relx=0.095, rely=0.043, height=32, width=92)
+        self.Label1.configure(foreground='black')
+        self.Label1.configure(background='#e6e6e6')
         self.Label1.configure(text='''Files to Scan''')
 
         self.Label3 = tk.Label(top)
         self.Label3.place(relx=0.433, rely=0.179, height=21, width=138)
+        self.Label3.configure(foreground='black')
+        self.Label3.configure(background='#e6e6e6')
         self.Label3.configure(text='''Timeout (0 = none)''')
+
+        self.Label2 = tk.Label(top)
+        self.Label2.place(relx=0.565, rely=0.043, height=32, width=87)
+        self.Label2.configure(foreground='black')
+        self.Label2.configure(background='#e6e6e6')
+        self.Label2.configure(text='''Options''')
+
 
         self.Entry1 = tk.Entry(top)
         self.Entry1.place(relx=0.717, rely=0.179,height=23, relwidth=0.137)
-        self.Entry1.configure(background="white")
         self.Entry1.configure(font="TkFixedFont")
+        self.Entry1.configure(foreground='black')
+        self.Entry1.configure(background='#e6e6e6')
         self.Entry1.configure(textvariable=rimsheets_support.eb_timeout)
-
-        self.Checkbutton4 = tk.Checkbutton(top)
-        self.Checkbutton4.place(relx=0.417, rely=0.267, relheight=0.052
-                , relwidth=0.278)
-        self.Checkbutton4.configure(justify='left')
-        self.Checkbutton4.configure(text='''Output as single file?''')
-        self.Checkbutton4.configure(variable=rimsheets_support.cb_singleFile)
 
         self.TSeparator1 = ttk.Separator(top)
         self.TSeparator1.place(relx=0.0, rely=0.134, relwidth=1.017)
@@ -108,54 +130,67 @@ class Toplevel1:
         self.TSeparator3 = ttk.Separator(top)
         self.TSeparator3.place(relx=0.0, rely=0.556, relwidth=0.992)
 
-        self.Label2 = tk.Label(top)
-        self.Label2.place(relx=0.565, rely=0.043, height=32, width=87)
-        self.Label2.configure(text='''Options''')
-
-        self.Checkbutton1 = tk.Checkbutton(top)
-        self.Checkbutton1.place(relx=0.016, rely=0.172, relheight=0.05
-                , relwidth=0.044)
-        self.Checkbutton1.configure(justify='left')
+        #Basic Options and Location Selection
+        self.Checkbutton1 = CustomCheckbutton(top)
+        self.Checkbutton1.place(x=20, rely=0.172, relheight=0.05
+                , relwidth=0.2)
+        self.Checkbutton1.configure(text='''Core''')
         self.Checkbutton1.configure(variable=rimsheets_support.cb_enableCore)
 
-        self.Checkbutton2 = tk.Checkbutton(top)
-        self.Checkbutton2.place(relx=0.016, rely=0.259, relheight=0.05
-                , relwidth=0.044)
-        self.Checkbutton2.configure(justify='left')
+        self.Checkbutton2 = CustomCheckbutton(top)
+        self.Checkbutton2.place(x=20, rely=0.259, relheight=0.05
+                , relwidth=0.2)
+        self.Checkbutton2.configure(text='''Royal''')
         self.Checkbutton2.configure(variable=rimsheets_support.cb_enableRoyal)
 
-        self.Checkbutton3 = tk.Checkbutton(top)
-        self.Checkbutton3.place(relx=0.016, rely=0.345, relheight=0.05
-                , relwidth=0.044)
-        self.Checkbutton3.configure(justify='left')
+        self.Checkbutton3 = CustomCheckbutton(top)
+        self.Checkbutton3.place(x=20, rely=0.345, relheight=0.05
+                , relwidth=0.25)
+        self.Checkbutton3.configure(text='''Steam Workshop''')
         self.Checkbutton3.configure(variable=rimsheets_support.cb_enableWorkshop)
 
-        self.Label4 = tk.Label(top)
-        self.Label4.place(relx=0.079, rely=0.172, height=21, width=35)
-        self.Label4.configure(text='''Core''')
+        self.Checkbutton4 = CustomCheckbutton(top)
+        self.Checkbutton4.place(relx=0.417, rely=0.267, relheight=0.052
+                , relwidth=0.278)
+        self.Checkbutton4.configure(text='''Output as single file?''')
+        self.Checkbutton4.configure(variable=rimsheets_support.cb_singleFile)
 
-        self.Label5 = tk.Label(top)
-        self.Label5.place(relx=0.079, rely=0.259, height=21, width=41)
-        self.Label5.configure(text='''Royal''')
+        #Sub Progress
+        self.TProgressbar2 = ttk.Progressbar(top, mode='determinate', maximum=100, value=0)
+        self.TProgressbar2.place(relx=0.032, rely=0.95, relwidth=0.937, relheight=0.0, height=19)
+        self.TProgressbar2.configure(length="600")
+        self.TProgressbar2.configure(variable=rimsheets_support.progressSubBar)
 
-        self.Label6 = tk.Label(top)
-        self.Label6.place(relx=0.079, rely=0.345, height=21, width=116)
-        self.Label6.configure(text='''Steam Workshop''')
-
+        self.Message2 = tk.Message(top)
+        self.Message2.place(relx=0.1, rely=0.65, relheight=0.2, relwidth=0.8)
+        self.Message2.configure(text='''Message''')
+        self.Message2.configure(justify='center')
+        self.Message2.configure(textvariable=rimsheets_support.msg_progressStage)
+        self.Message2.configure(width=500) 
+        
+        #Overall Progress
         self.TProgressbar1 = ttk.Progressbar(top, mode='determinate', maximum=100, value=0)
         self.TProgressbar1.place(relx=0.032, rely=0.9, relwidth=0.937, relheight=0.0, height=19)
         self.TProgressbar1.configure(length="600")
         self.TProgressbar1.configure(variable=rimsheets_support.progressBar)
 
+        #TODO find out if this is needed or not
         self.menubar = tk.Menu(top,font="TkMenuFont",bg=_bgcolor,fg=_fgcolor)
         top.configure(menu = self.menubar)
  
         self.Message1 = tk.Message(top)
-        self.Message1.place(relx=0.1, rely=0.65, relheight=0.2, relwidth=0.8)
+        self.Message1.place(relx=0.1, rely=0.6, relheight=0.06, relwidth=0.8)
         self.Message1.configure(text='''Message''')
         self.Message1.configure(justify='center')
         self.Message1.configure(textvariable=rimsheets_support.msg_output)
         self.Message1.configure(width=500) 
+
+        #Buttons and Context Menus
+        self.Button1 = tk.Button(top)
+        self.Button1.place(x=80, rely=0.45, height=31, width=60)
+        self.Button1.configure(command=rimsheets_support.run)
+        self.Button1.configure(text='''Start''')
+
         
 
 if __name__ == '__main__':
