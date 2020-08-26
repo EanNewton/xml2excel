@@ -33,6 +33,10 @@ def getFileList(dirName, fileType='xml'):
 def scanXMLfiles(filename, modName, progress):
 	""" Get raw data contained in XML files """
 	rimsheets_support.setSubProgress('Scanning XML:\n{}'.format(filename), progress)
+	
+	#Within try-except due to known bug from xml.etree.ElementTree package
+	#on call to ET.parse(file) if header reads as encoding="UTF-8" instead
+	#of encoding="utf-8" it will crash with a ParseError
 	try:
 		tree = ET.parse(filename)
 		scanned = ['!BREAK!', ['Source', modName]]
