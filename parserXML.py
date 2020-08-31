@@ -1,8 +1,11 @@
 #TODO choice between group by mod or by def type for workshop
 #TODO pause / cancel
 
-import os
-import time
+#import os
+from os import walk as os_walk
+from os.path import join as os_join
+#import time
+from time import perf_counter
 from pathlib import Path
 from re import search as regexpSearch
 import xml.etree.ElementTree as ET
@@ -25,21 +28,21 @@ SINGLE_FILE = False
 
 def getFileList(dirName, fileType='xml'): 
 	listOfFiles = list()
-	for (dirpath, _, filenames) in os.walk(dirName[0]):
-		listOfFiles += [os.path.join(dirpath, file) for file in filenames if fileType in file.split('.')[-1]]
+	for (dirpath, _, filenames) in os_walk(dirName[0]):
+		listOfFiles += [os_join(dirpath, file) for file in filenames if fileType in file.split('.')[-1]]
 	return listOfFiles
 
 
 def scanXMLfiles(filename, modName, progress):
 	""" Get raw data contained in XML files """
 	rimsheets_support.setSubProgress('Scanning XML:\n{}'.format(filename), progress)
-	
-	#Within try-except due to known bug from xml.etree.ElementTree package
-	#on call to ET.parse(file) if header reads as encoding="UTF-8" instead
-	#of encoding="utf-8" it will crash with a ParseError
 	try:
 		tree = ET.parse(filename)
-		scanned = ['!BREAK!', ['Source', modName]]
+		scanned = [
+			'!BREAK!', 
+			['Source', '{}_{}'.format(modName, filename.split('/')[-1])], 
+			['File Path', filename]
+			]
 		topleveltag = ''
 
 		for idx, elem in enumerate(tree.iter()):
@@ -62,94 +65,91 @@ def scanXMLfiles(filename, modName, progress):
 		return ['']
 
 
+def categorizeFile(filename):
+	try:
+		#Finding names of worksheets for grouping data
+		#TODO find a way to reduce the line count for this
+		if regexpSearch('RimWorld/Data/Core/Defs', filename):
+			category = filename.split('/Defs/')[-1]
+			category = category.split('/')[-2]
+			modName = 'Core'
+		elif regexpSearch('RimWorld/Data/Royalty/Defs', filename):
+			category = filename.split('/Defs/')[-1]
+			category = category.split('/')[-2]
+			modName = 'Royalty'
+		elif regexpSearch('Steam/steamapps/workshop/content/294100/', filename):
+			category = filename.split('/294100/')[-1]
+			category = category.split('/')[0]
+			modName = 'Workshop'
+		else:
+			category = filename.split('/')[-2:]
+			modName = 'Custom Mod'
+
+		return category, modName
+
+	except:
+		if LOGGING:
+			with open('./log.txt', 'a') as f:
+				f.write('UnknownModException on {}\n'.format(filename))
+		return None, None
+
+
 def parseXML(listOfFiles):
 	""" Convert and categorize raw data into a python dict() """
 	dictOfDefs = dict()
 	i = 1
 	for elem in listOfFiles:
 		progress = (int(i) * 100) / int(len(listOfFiles))
-
-		try:
-			#Finding names of worksheets
-			#for grouping data
-			if regexpSearch('RimWorld/Data/Core/Defs', elem):
-				category = elem.split('/Defs/')[-1]
-				category = category.split('/')[-2]
-				modName = 'Core'
-			elif regexpSearch('RimWorld/Data/Royalty/Defs', elem):
-				category = elem.split('/Defs/')[-1]
-				category = category.split('/')[-2]
-				modName = 'Royalty'
-			elif regexpSearch('Steam/steamapps/workshop/content/294100/', elem):
-				category = elem.split('/294100/')[-1]
-				category = category.split('/')[0]
-				modName = 'Workshop'
-			else:
-				category = elem.split('/')[-2:]
-				modName = 'Custom Mod'
-		except:
-			if LOGGING:
-				with open('./log.txt', 'a') as f:
-					f.write('UnknownModException on {}\n'.format(elem))
+		category, modName = categorizeFile(elem)
 
 		#Pull the data out of the file and insert to proper group / worksheet
-		if elem.split('.')[-1] == 'xml' and category not in EXCLUDED:
-			if category in dictOfDefs:
-				newR = dictOfDefs[category] + scanXMLfiles(elem, modName, progress)
-				dictOfDefs[category] = newR
-			else:
-				dictOfDefs[category] = scanXMLfiles(elem, modName, progress)
-		i += 1
+		if category is not None and modName is not None:
+			#Sanity check but should not be needed
+			if elem.split('.')[-1] == 'xml' and category not in EXCLUDED:
+				if category in dictOfDefs:
+					newR = dictOfDefs[category] + scanXMLfiles(elem, modName, progress)
+					dictOfDefs[category] = newR
+				else:
+					dictOfDefs[category] = scanXMLfiles(elem, modName, progress)
+			i += 1
 
 	return dictOfDefs
 
 
-def toDF(filename, data, isPostponed=False):
+#TODO this function is the main speed bottleneck
+#calculating and setting the progress is a major portion of that
+def toDF(filename, data):
 	"""Convert parsed XML data of the same kind (eg HediffDefs) to single pandas dataframes"""
 	listOfDf = list()
+	counters = dict()
 	df = dict()
-	listOfDicts = [[], []]
-	
-	i = 0
-	for each in data:
-		if each != '!BREAK!':
-			listOfDicts[i].append(each)
-		else:
-			i += 1
-			listOfDicts.append([''])
+	progLength = len(data)
 
-	#Convert defs to pandas dataframes
-	i = 1
-	for idx, def_ in enumerate(listOfDicts):
-		progress = (int(idx+1) * 100) / int(len(listOfDicts))
-		for each in def_:
-			try:
-				df[each[0]] = each[1]	
-				rimsheets_support.setSubProgress('Creating {} data:\n{}\n{} / {}'.format(
-					filename, each[0], idx+1, len(listOfDicts)), progress)
-			except:
+	for idx, each in enumerate(data):
+		progress = ((int(idx) * 100) / progLength)
+		rimsheets_support.setSubProgress('Converting:\n{}\n{} / {}'.format(filename, idx+1, progLength), progress)
+		if type(each) is list:
+			if each[1] != '':
+				if each[0] in df:
+					#counters associates multiple items across categories with a tag
+					if each[0] in counters:
+						counters[each[0]] += 1
+					else:
+						counters[each[0]] = 2
+					newTMP = '{}, {}: {}'.format(df[each[0]][0], counters[each[0]], each[1])
+					df[each[0]] = [newTMP]
+				else:
+					df[each[0]] = [each[1]]
+			else:
 				pass
-			
-		listOfDf.append(pd.DataFrame(df, index=[i]))
-		i += 1
-	
-	try:
-		result = pd.concat(listOfDf).drop_duplicates('defName').set_index('defName')
-	except KeyError:
-		try:
-			if LOGGING:
-				with open('./log.txt', 'a') as f:
-					f.write('KeyError on {}. Trying again without \'defName\' filtering. \n'.format(filename))
-			result = pd.concat(listOfDf)
-			if LOGGING:
-				with open('./log.txt', 'a') as f:
-					f.write('Success on {}.'.format(filename))
-		except:
-			if LOGGING:
-				with open('./log.txt', 'a') as f:
-					f.write('Unknown Error on {}\n'.format(filename))
-	return [filename, result]
-	
+		else:
+			if len(df) > 0:
+				listOfDf.append(pd.DataFrame.from_dict(df))
+				df = dict()
+				counters = dict()
+
+	result = pd.concat(listOfDf, ignore_index=True)
+	return [filename, result], progLength
 
 
 def toExcel(dfList, filename):
@@ -165,7 +165,7 @@ def toExcel(dfList, filename):
 		if len(sheetName) > 31:
 			sheetName = sheetName[:30]
 		try:
-			#In the even that two XML share a category but with different string cases
+			#In the event that two XML share a category but with different string cases
 			#e.g. ran into Core --> 'Storyteller' and Royalty --> 'StoryTeller'
 			#pandas / Excel cannot differentiate the two and throws an error
 			try:
@@ -195,46 +195,56 @@ def cleanup(dfList, filename):
 def timeConvert(seconds):
 	minutes, seconds = divmod(seconds, 60)
 	hours, minutes = divmod(minutes, 60)
-	return '{} hours {} minutes {} seconds'.format(hours, minutes, (round(seconds, 4)))
+	if hours > 0:
+		banner = '{} hours {} minutes {} seconds'.format(int(hours), int(minutes), (round(seconds, 4)))
+	elif minutes > 0:
+		banner = '{} minutes {} seconds'.format(int(minutes), (round(seconds, 4)))
+	else:
+		banner = '{} seconds'.format((round(seconds, 4)))
+	return banner
 
 
 #The main entry point
 def run():	
 	ELAPSED_TIME = 0.0
-	tic = time.perf_counter()
+	tic = perf_counter()
 	toRun = list()
+	elementCount = 0
 
 	rimsheets_support.setProgress('Collecting files to scan.', 0)
 	if not SINGLE_FILE and len(DEFS) > 1:
 		for each in DEFS:
 			filename = '{}_{}'.format(OUTPUT_NAME, each[1])
 			listOfFiles = getFileList(each)
+			fileCount = len(listOfFiles)
 			toRun.append([filename, parseXML(listOfFiles)])
 	else:
 		listOfFiles = list()
 		for each in DEFS:
 			listOfFiles.insert(0, getFileList(each))
 		flat_list = [item for sublist in listOfFiles for item in sublist]
+		fileCount = len(flat_list)
 		toRun = [[OUTPUT_NAME, parseXML(flat_list)]]
 
 	j = 1
 	for filename, dictOfDefs in toRun:
 		dfList = list()
 		i = 1
+		progLength = int(len(dictOfDefs))
 		for key, val in dictOfDefs.items():
-			
 			try:
-				progress = (int(i) * 100) / int(len(dictOfDefs))
-				banner = 'Parsing\n{} / {}\n Working... Please be patient this may take a while.'.format(i, len(dictOfDefs))
-		
+				progress = (int(i) * 100) / progLength
+				banner = 'Parsing\n{} / {}\n Working... Please be patient this may take a while.'.format(i, progLength)
 				rimsheets_support.setProgress(banner, progress)
-				df = toDF(key, val)
+				
+				df, count = toDF(key, val)
 				if df:
 					dfList.append(df)
+					elementCount += count
 			except:
 				pass
 			i += 1
-
+		
 		if not SINGLE_FILE:
 			rimsheets_support.setProgress('Cleaning and exporting {} with {} sheets.'.format(filename, len(dfList)), ((j * 100) / len(toRun)))
 			cleanup(dfList, filename)
@@ -244,6 +254,6 @@ def run():
 		cleanup(dfList, filename)
 
 	rimsheets_support.setProgress('', 100)
-	toc = time.perf_counter()
+	toc = perf_counter()
 	ELAPSED_TIME = toc - tic
-	rimsheets_support.setSubProgress('Done in {}.'.format(timeConvert(ELAPSED_TIME)), 100)
+	rimsheets_support.setSubProgress('Completed {} files and {} elements in:\n{}.'.format(fileCount, elementCount, timeConvert(ELAPSED_TIME)), 100)
