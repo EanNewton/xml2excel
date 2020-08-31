@@ -1,10 +1,8 @@
 #TODO choice between group by mod or by def type for workshop
 #TODO pause / cancel
 
-#import os
 from os import walk as os_walk
 from os.path import join as os_join
-#import time
 from time import perf_counter
 from pathlib import Path
 from re import search as regexpSearch
@@ -60,6 +58,7 @@ def scanXMLfiles(filename, modName, progress):
 			if elem.text:
 				text = elem.text.strip()
 			scanned.append([tag, text])
+		scanned.append('!BREAK!')
 		return scanned
 	except:
 		return ['']
@@ -97,9 +96,9 @@ def categorizeFile(filename):
 def parseXML(listOfFiles):
 	""" Convert and categorize raw data into a python dict() """
 	dictOfDefs = dict()
-	i = 1
-	for elem in listOfFiles:
-		progress = (int(i) * 100) / int(len(listOfFiles))
+	
+	for idx, elem in enumerate(listOfFiles):
+		progress = (int(idx) * 100) / int(len(listOfFiles))
 		category, modName = categorizeFile(elem)
 
 		#Pull the data out of the file and insert to proper group / worksheet
@@ -111,7 +110,6 @@ def parseXML(listOfFiles):
 					dictOfDefs[category] = newR
 				else:
 					dictOfDefs[category] = scanXMLfiles(elem, modName, progress)
-			i += 1
 
 	return dictOfDefs
 
@@ -127,7 +125,10 @@ def toDF(filename, data):
 
 	for idx, each in enumerate(data):
 		progress = ((int(idx) * 100) / progLength)
-		rimsheets_support.setSubProgress('Converting:\n{}\n{} / {}'.format(filename, idx+1, progLength), progress)
+		banner = 'Converting:\n{}\n{} / {}'.format(filename, idx+1, progLength)
+		rimsheets_support.setSubProgress(banner, progress)
+		
+		#Check for "!BREAK!"
 		if type(each) is list:
 			if each[1] != '':
 				if each[0] in df:
@@ -142,6 +143,8 @@ def toDF(filename, data):
 					df[each[0]] = [each[1]]
 			else:
 				pass
+
+	
 		else:
 			if len(df) > 0:
 				listOfDf.append(pd.DataFrame.from_dict(df))
