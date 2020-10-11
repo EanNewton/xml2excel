@@ -16,38 +16,20 @@ except ImportError:
 
 import rimsheets_support
 
+
 def vp_start_gui():
     '''Starting point when module is the main routine.'''
-    #global val, w, root #TODO val and root never used, needed?
-    global w
+    global root
     root = tk.Tk()
     rimsheets_support.set_Tk_var()
-    top = Toplevel1 (root)
+    top = Toplevel1(root)
     rimsheets_support.init(root, top)
     root.mainloop()
-
-w = None
-def create_Toplevel1(rt, *args, **kwargs):
-    '''Starting point when module is imported by another module.
-       Correct form of call: 'create_Toplevel1(root, *args, **kwargs)' .'''
-    #global w, w_win, root #TODO w_win called but never used, needed?
-    global w, root
-    #rt = root
-    root = rt
-    w = tk.Toplevel (root)
-    rimsheets_support.set_Tk_var()
-    top = Toplevel1 (w)
-    rimsheets_support.init(w, top, *args, **kwargs)
-    return (w, top)
-
-def destroy_Toplevel1():
-    global w
-    w.destroy()
-    w = None
 
 
 def browseDirectory():
     rimsheets_support.directory_core.set(filedialog.askdirectory())
+
 
 def browseModDirectory():
     rimsheets_support.directory_workshop.set(filedialog.askdirectory())
@@ -61,8 +43,6 @@ class CustomCheckbutton(tk.Checkbutton):
         self.defaultBackground = self['background']
         self.configure(highlightbackground='#e6e6e6')
         self.configure(justify='left')
-        #self.bind('<Enter>', self.on_enter)
-        #self.bind('<Leave>', self.on_leave)
 
     def on_enter(self, e):
         self['background'] = self['activebackground']
@@ -90,7 +70,7 @@ class Toplevel1:
         self.style.map('.',background=
             [('selected', _compcolor), ('active',_ana2color)])
 
-        top.geometry("630x464+951+424")
+        top.geometry("640x640+551+424")
         top.minsize(1, 1)
         top.maxsize(2545, 1570)
         top.resizable(1, 1)
@@ -176,6 +156,11 @@ class Toplevel1:
         self.Checkbutton4.configure(text='''Output as single file?''')
         self.Checkbutton4.configure(variable=rimsheets_support.cb_singleFile)
 
+        self.Checkbutton5 = CustomCheckbutton(self.Frame1)
+        self.Checkbutton5.grid(column=0, row=4, sticky=tk.N+tk.S+tk.W+tk.E)
+        self.Checkbutton5.configure(text='''Enable logging?''')
+        self.Checkbutton5.configure(variable=rimsheets_support.cb_logging)
+
         #Lower message box
         self.Message2 = tk.Message(top)
         self.Message2.place(relx=0.1, rely=0.67, relheight=0.2, relwidth=0.8)
@@ -209,8 +194,8 @@ class Toplevel1:
         top.configure(menu = self.menubar)
  
         #Buttons and Context Menus
-        self.Button1 = tk.Button(Frame1)
-        self.Button1.place(relx=0.5, rely=0.45, height=31, width=60)
+        self.Button1 = tk.Button(self.Frame1)
+        self.Button1.place(relx=0.4, rely=0.8, height=31, width=60)
         self.Button1.configure(command=rimsheets_support.run)
         self.Button1.configure(text='''Start''')
 
@@ -223,8 +208,6 @@ class Toplevel1:
         self.Button3.place(relx=0.555, rely=0.45, height=31, width=170)
         self.Button3.configure(command=browseModDirectory)
         self.Button3.configure(text='''Change Mod Directory''')
-
-        
 
 if __name__ == '__main__':
     vp_start_gui()

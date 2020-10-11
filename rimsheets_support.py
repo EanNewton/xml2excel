@@ -31,6 +31,9 @@ def set_Tk_var():
     
     global cb_enableWorkshop
     cb_enableWorkshop = tk.IntVar()
+
+    global cb_logging
+    cb_logging = tk.IntVar()
     
     global eb_timeout
     eb_timeout = tk.StringVar()
@@ -94,23 +97,13 @@ def setProgress(message, progress):
     msg_output.set(message)
     progressBar.set(progress)
     top_level.update()
-    #os.system('clear')
-    #current, peak = tracemalloc.get_traced_memory()
-    #print(f"Current memory usage is {current / 10**6}MB\nPeak was {peak / 10**6}MB")
 
 def setSubProgress(message, progress):
     msg_progressStage.set(message)
     progressSubBar.set(progress)
     top_level.update()
-    #os.system('clear')
-    #current, peak = tracemalloc.get_traced_memory()
-    #print(f"Current memory usage is {current / 10**6}MB\nPeak was {peak / 10**6}MB")
-
 
 def run():
-    #tracemalloc.start() 
-    
-
     if str(eb_timeout.get()).isnumeric():
         parserXML.TIMEOUT_VAL = int(eb_timeout.get())
 
@@ -139,17 +132,11 @@ def run():
             return
     
     parserXML.SINGLE_FILE = True if cb_singleFile.get() else False
+    parserXML.LOGGING = True if cb_logging.get() else False
     
-   # print(parserXML.DEFS)
     parserXML.run()
     parserXML.DEFS.clear()
     sys.stdout.flush()
-   # tracemalloc.stop()
-
-def destroy_window():
-    global top_level
-    top_level.destroy()
-    top_level = None
 
 if __name__ == '__main__':
     import rimsheets

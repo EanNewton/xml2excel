@@ -1,6 +1,3 @@
-#TODO choice between group by mod or by def type for workshop
-#TODO pause / cancel
-
 from os import walk as os_walk
 from os.path import join as os_join
 from time import perf_counter
@@ -28,6 +25,11 @@ def getFileList(dirName, fileType='xml'):
 	listOfFiles = list()
 	for (dirpath, _, filenames) in os_walk(dirName[0]):
 		listOfFiles += [os_join(dirpath, file) for file in filenames if fileType in file.split('.')[-1]]
+	if LOGGING:
+		message = '\n'.join(listOfFiles)
+		with open('./log.txt', 'a') as f:
+			f.write('\n\nFILE LIST:\n')
+			f.write(message)
 	return listOfFiles
 
 
@@ -67,7 +69,6 @@ def scanXMLfiles(filename, modName, progress):
 def categorizeFile(filename):
 	try:
 		#Finding names of worksheets for grouping data
-		#TODO find a way to reduce the line count for this
 		if regexpSearch('RimWorld/Data/Core/Defs', filename):
 			category = filename.split('/Defs/')[-1]
 			category = category.split('/')[-2]
@@ -81,7 +82,7 @@ def categorizeFile(filename):
 			category = category.split('/')[0]
 			modName = 'Workshop'
 		else:
-			category = filename.split('/')[-2:]
+			category = filename.split('/')[-1]
 			modName = 'Custom Mod'
 
 		return category, modName
@@ -114,8 +115,6 @@ def parseXML(listOfFiles):
 	return dictOfDefs
 
 
-#TODO this function is the main speed bottleneck
-#calculating and setting the progress is a major portion of that
 def toDF(filename, data):
 	"""Convert parsed XML data of the same kind (eg HediffDefs) to single pandas dataframes"""
 	listOfDf = list()
