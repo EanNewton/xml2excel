@@ -1,4 +1,4 @@
-# RimSheets
+# xml2excel
 
 Compiles directories of XML files into an Excel sheet. 
 
